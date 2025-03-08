@@ -20,6 +20,82 @@
 // You may contact the author via email at: k5kdn@arrl.net
 //=================================================================
 
+/*
+
+INTRODUCTORY COMMENTS. THIS IS T-v21038.acom-B
+
+Added Thetis support for the AUTO TUNE feature of ACOM 2020S/1200S/700S/600S/500S amplifiers and 04AT/06AT tuners (AAT?s) 
+This series of ACOM amplifiers and tuners supports an automated TUNE feature initiated by a button push on the amplifier front panel, or by a left mouse click on the ACOM eBox remote amplifier control screen AUTO TUNE soft key. This feature initiates a sequence of CAT commands from the AAT to the attached CAT enabled transceiver. This CAT command sequence, as documented by ACOM emails, is:
+
+FA; *polling the radio frequency
+PC; *polling the radio output power
+PC000; *sets the radio power 0W
+MD; *polling the radio mode
+MD6; *sets mode FSK
+DT; *polling the data mode
+DT2; *sets data mode FSK
+MG; *polling microphone gain
+MG000; *sets mike gain 0
+TX; *switch the radio to TX mode
+PC013
+PC026
+PC039
+PC052 *Ramping up the radio output power until OK for tune up
+RX; *switch to RX mode
+PCxxx;
+MDyyy;
+DTzzz;
+MGnnn; Sets back the radio initial power and mode
+
+Additional email from ACOM indicates that the AAT?s (may) verify the commands which result in changes in the transceiver by sending a CAT GET command 
+to obtain the transceiver status to verify that the commanded change has taken place.
+
+This AAT CAT sequence is intended to save the state of the attached transceiver, put the transceiver into FSK mode via an MD6 CAT command to provide a carrier for the tuner, 
+assert transmit (TX), ramp power to a level sufficient for the tuner via a series of PC commands, perform the tune operation, assert receive (RX), and restore the state of the
+transceiver existing prior to the TUNE operation.
+
+Present versions of Thetis client software for the Apache Labs ANAN series of transceivers do not support this ACOM feature. Thetis implements a reduced version of the 
+standard Kenwood CAT command set which does not support selecting FSK mode, as the ANAN transceivers do not support a native FSK mode; support is provided for AFSK mode but 
+this mode does not produce an RF output signal without modulation and is not suitable for use with the AAT TUNE feature. Also, Thetis does not support the DT commands sent by 
+the AAT. These are normally used to set sub-modes on certain Elecraft radios and have no purpose in Apache Labs radios. Thetis presently returns a ??? response to DT commands.
+
+These comments describe additions to Thetis code which enable support for the AAT TUNE feature. Initially the basic AAT TUNE operation changes will be made and tested; 
+once these changes are working correctly, additional code will be added to:
+
+?	Check the status of the USE DRIVE SLIDER vs TUN SLIDER option and, save and set to DRIVE SLIDER if not already set. 
+Restore original setting when exiting AAT TUNE operation; this eliminates the need to manually check/set this option prior to initiating an AAT TUNE operation.
+
+?	Incorporate AAT TUNE support as an option selectable in a Thetis Setup screen
+
+
+Added support for the AAT TUNE feature in Thetis which does not change ANAN transceiver mode (e.g. LSB, USB, FM, DIGU, DIGL etc) during an AAT TUNE operation. 
+It is thought that changing modes during TUNE operations may result in unwanted side effects such as changes in Thetis Transmit Profiles.
+
+Issues:
+
+?	The AAT CAT command sequence includes an MD6 command which changes the existing transceiver mode to DIGL (AFSK). 
+In the standard Kenwood CAT command set, an MD6 command is intended to put the transceiver into FSK mode; since there is no ANAN hardware/firmware  support for FSK, 
+Thetis instead puts the transceiver into DIGL mode (AFSK)). To avoid allowing the MD6 command to change the transceiver mode, it must be trapped and handled in a way
+compatible with the AAT?s. Also provision must be made for correctly handling an MD6; command (change mode to DIGL (AFSK) that is not issued as part of an AAT TUNE 
+operation
+
+?	The AAT sends several DT commands during an AAT TUNE operation. Provision must be made to handle these. As described below, DT commands will be repurposed to assist in 
+implementing AAT TUNE support in Thetis. This should cause no issues as Thetis does not otherwise recognize DT commands; typically, DT commands would be sent to Thetis 
+only as part of an AAT TUNE operation.
+
+?	TX and RX commands from AATs will need to be handled in a way that uses the Thetis TUN feature instead. After further review/testing, it appears that asserting TUN will 
+override the TX AND RX commands.
+
+These comments apply also to the CATCommands class.
+
+Addition of ACOM Auto Tune support results in changes to CATParser, CATCommands, CATStructs, and TitleBar classes. 
+
+In CATParser, DT command is added.
+In CATCommands, DT command is added, MD, RX, and TX commands are modified.
+In TitleBar, changes are added to show acom version in title bar.
+
+*/
+
 
 using System;
 using System.Xml;
@@ -74,6 +150,9 @@ namespace Thetis
            get { return verbose_error_code;}
            set {verbose_error_code = value;}
         }
+
+		
+		public string DTFlag;			// DECLARE DTFlag STRING VARIABLE; USED TO CONTROL AAT TUNE OPERATION
 
 		#endregion Variable declarations
 
@@ -180,6 +259,9 @@ namespace Thetis
 						rtncmd = cmdlist.DN();
 						break;
 					case "DQ":
+						break;
+					case "DT":										// DEFINE CASE DT
+						rtncmd = cmdlist.DT(suffix);
 						break;
 					case "EX":
 						break;
