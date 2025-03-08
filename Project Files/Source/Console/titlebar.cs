@@ -29,6 +29,8 @@
 // Continual modifications Copyright (C) 2019-2024 Richard Samphire (MW0LGE)
 //=================================================================
 
+// ADDS CHANGES TO SHOW ACOM VERSION ID IN TITLE BAR  
+
 using System;
 using System.Diagnostics;
 using System.Reflection;
@@ -38,6 +40,7 @@ namespace Thetis
     class TitleBar
     {
         public const string BUILD_NAME = "";
+        public const string ACOM_VERSION = "-B";  // DECLARE STRING CONSTANT FOR DASH VERSION
         public static string GetString(bool bWithFirmware = true)
         {
             string sRevision = "." + Common.GetRevision();
@@ -46,7 +49,7 @@ namespace Thetis
             string version = Common.GetVerNum() + sRevision;
             string s = "Thetis";
 
-            string sBits = Common.Is64Bit ? " x64" : " x86";
+            string sBits = Common.Is64Bit ? ".acom" + ACOM_VERSION +  " x64" : " x86";  // ADD .acom AND DASH VERSION TO TITLE BAR
 
             s += " v" + version + sBits;
             s += " (" + VersionInfo.BuildDate + ")<FW>";  //[2.10.2.2]MW0LGE use the auto generated class from pre build event for the BuildDate
